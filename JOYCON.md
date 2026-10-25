@@ -1,6 +1,6 @@
 # Shadow MD with Joy-Con support
 
-*The bench test sketch, the printable button map and the pairing details live with the rest of the Joy-Con work, in the [ShadowMD Lite repo](https://github.com/Fernando-Beltran/ShadowMDLite/tree/main/JoyCon). This file covers what changed inside Eebel's sketch.*
+*The bench test sketch, the printable button map and the pairing details live with the rest of the Joy-Con work, in the [ShadowMD Lite repo](https://github.com/BeskarCode/ShadowMDLite/tree/main/JoyCon). This file covers what changed inside Eebel's sketch.*
 
 This is Eebel's Shadow MD, unchanged in behaviour, with one structural addition: the sketch no longer talks to the PS3 controller directly. It talks to a small controller interface, and behind that interface there is either a PS3 Move Navigation, exactly as before, or a single Nintendo Switch Joy-Con.
 
@@ -26,7 +26,7 @@ No re-uploading and no editing.
 - **To pair again**, hold **Minus + Capture** (left) or **Plus + Home** (right) for 5 seconds, or reset the Mega three times in a row. While the session is open the droid does not move; it closes when both halves are connected, or after 60 seconds.
 - **A Joy-Con that has been used on a Switch** is caught when it pairs: the droid asks you to hold sync again, and the second time it is accepted.
 
-Each step plays an R2 sound, set in `ControllerConfig.h`. On connection the player LEDs alternate outer and inner for two seconds, then settle on LED 1 (left) or LED 2 (right). The full user guide, with the sounds and what each one means, is in [the ShadowMD Lite repo](https://github.com/Fernando-Beltran/ShadowMDLite/blob/main/JoyCon/README.md#pairing).
+Each step plays an R2 sound, set in `ControllerConfig.h`. On connection the player LEDs alternate outer and inner for two seconds, then settle on LED 1 (left) or LED 2 (right). The full user guide, with the sounds and what each one means, is in [the ShadowMD Lite repo](https://github.com/BeskarCode/ShadowMDLite/blob/main/JoyCon/README.md#pairing).
 
 ## What actually changed in the sketch
 
@@ -92,7 +92,7 @@ Each build is measured with the library it actually needs (see Requirements). Th
 - The Joy-Con implementation handles the switch to full report mode, stick centring on connection, drift recentring while the stick rests, detecting which half connected, the different button map of each half, and grip orientation.
 - The order does not matter: whichever Joy-Con wakes up first, the left half drives the foot and the right half the dome (`DroidPad::updatePair()`). If only the right one is connected, it goes to the dome and the foot stays still. Tested on the bench with the right half connecting first.
 - Pairing without re-uploading is bench-tested: first boot, the button combo, the 60 second timeout, triple reset, a Joy-Con docked on a Switch (rejected, then accepted after syncing again), and reconnecting by button after a reset or after turning a Joy-Con off. The bench test runs the same `JoyConPairing.h` used here.
-- There is a bench test sketch, [`BenchTest`](https://github.com/Fernando-Beltran/ShadowMDLite/tree/main/JoyCon/BenchTest), that reads controllers and prints what it sees without driving anything. Run that first, with the droid powered down.
+- There is a bench test sketch, [`BenchTest`](https://github.com/BeskarCode/ShadowMDLite/tree/main/JoyCon/BenchTest), that reads controllers and prints what it sees without driving anything. Run that first, with the droid powered down.
 
 Do not take this to an event until you have driven it in your workshop.
 
@@ -102,4 +102,4 @@ Do not take this to an event until you have driven it in your workshop.
 
 The Joy-Con protocol details come from dekuNukem's reverse engineering notes, https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering. Thank you.
 
-Original Shadow MD by Eebel, from https://github.com/Eebel/SHADOW_MD_EEBEL, built on KnightShade's SHADOW. The controller abstraction and the Joy-Con support come from the work on ShadowMD Lite, https://github.com/Fernando-Beltran/ShadowMDLite
+Original Shadow MD by Eebel, from https://github.com/Eebel/SHADOW_MD_EEBEL, built on KnightShade's SHADOW. The controller abstraction and the Joy-Con support come from the work on ShadowMD Lite, https://github.com/BeskarCode/ShadowMDLite
