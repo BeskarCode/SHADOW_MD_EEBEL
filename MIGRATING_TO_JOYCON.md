@@ -192,12 +192,12 @@ With the droid's motors powered **off**, or the wheels off the ground:
 2. Hold the small **sync button** on the rail of the **left** Joy-Con until it connects and vibrates. Then the **right** one.
 3. From now on, press any button on each Joy-Con and it calls the droid back. After a disconnect, wait about ten seconds first.
 
-To pair again later, hold **Minus + Capture** (left) or **Plus + Home** (right) for 5 seconds, or reset the Mega three times in a row. If the droid asks you to sync again, that Joy-Con still remembers a Switch: hold sync once more. The full guide, with the sounds and LEDs, is in [the ShadowMD Lite repo](https://github.com/Fernando-Beltran/ShadowMDLite/blob/main/JoyCon/README.md#pairing).
+To pair again later, hold **Minus + Capture** (left) or **Plus + Home** (right) for 5 seconds, or reset the Mega three times in a row. If the droid asks you to sync again, that Joy-Con still remembers a Switch: hold sync once more. The full guide, with the sounds and LEDs, is in [the ShadowMD Lite repo](https://github.com/BeskarCode/ShadowMDLite/blob/main/JoyCon/README.md#pairing).
 
 ## 9. Check before you drive
 
 - Both sticks move the right things: the **left** Joy-Con drives the feet, the **right** one turns the dome. Whichever connects first, they always end up that way.
-- The button map: print [`CheatSheet_JoyCon.html`](https://github.com/Fernando-Beltran/ShadowMDLite/blob/main/JoyCon/CheatSheet_JoyCon.html). Minus and Plus are the old CROSS, Capture and Home the old CIRCLE, the stick click the old PS.
+- The button map: print [`CheatSheet_JoyCon.html`](https://github.com/BeskarCode/ShadowMDLite/blob/main/JoyCon/CheatSheet_JoyCon.html). Minus and Plus are the old CROSS, Capture and Home the old CIRCLE, the stick click the old PS.
 - **The watchdog.** Drive slowly, wheels off the ground, and turn the foot Joy-Con off with its sync button. The motors must stop.
 
 ## Going back to the Navs
