@@ -6,6 +6,9 @@ void setup()
     //Debug Serial for use with USB Debugging
     Serial.begin(115200);
     while (!Serial);
+#if ENABLE_ROS2D2
+    Serial.println(F("TRACK OFF boot"));
+#endif
     
     if (Usb.Init() == -1)
     {
