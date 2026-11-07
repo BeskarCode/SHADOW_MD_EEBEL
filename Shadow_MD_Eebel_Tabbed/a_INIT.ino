@@ -54,6 +54,31 @@ int CustomSongMax = 8; //Total Number of Custom Songs
 #define SHADOW_VERBOSE     //uncomment this for console VERBOSE output
 
 // ---------------------------------------------------------------------------------------
+//                          ROS2D2 (Raspberry Pi over USB serial)
+// ---------------------------------------------------------------------------------------
+// ROS2D2 is a ROS 2 brain on a Raspberry Pi that sends one text command per line over the
+// USB serial port (115200 baud). Same protocol as ShadowMD Lite (see FootAuto.h).
+//  - Face tracking: PS + L2 on the dome controller switches it on and off. While it is on,
+//    the Pi may turn the dome with ROS:DOME:<speed> (or DM:<speed>). The dome stops when no
+//    command arrives for DOME_TRACKER_TIMEOUT_MS, and the dome stick always wins: after a
+//    manual move ROS:DOME: is ignored for DOME_TRACKER_MANUAL_HOLD_MS. Losing the dome
+//    controller, a controller fault or ROS:TRACK:0 from the Pi switch it off. The Pi can
+//    never switch it on.
+//  - Any other line answers "ERR unknown command"; a line longer than ROS_LINE_SIZE - 1
+//    characters is discarded and answers "ERR line too long".
+// 0 = off: the sketch builds and behaves exactly as before.
+#define ENABLE_ROS2D2 0
+#define FOOT_AUTO_MAX_DRIVE   40       // |ROS:FOOT: drive| clamp; keep below drivespeed1
+#define FOOT_AUTO_MAX_TURN    30       // |ROS:FOOT: turn| clamp; keep below turnspeed
+#define FOOT_AUTO_TIMEOUT_MS  300      // no ROS:FOOT: for this long -> the feet stop
+#define FOOT_AUTO_RAMP        4        // max change per Sabertooth send (every serialLatency ms)
+#define FOOT_AUTO_SILENT_MS   300      // controller silent this long = lost
+#define DOME_TRACKER_MAX_SPEED       80     // |ROS:DOME:| is clamped to this (SyRen range is 0-127)
+#define DOME_TRACKER_TIMEOUT_MS      300    // no ROS:DOME: / DM: for this long -> the dome stops
+#define DOME_TRACKER_MANUAL_HOLD_MS  2000   // after a manual dome move, ROS:DOME: is ignored this long
+#define ROS_LINE_SIZE         64       // USB line buffer, including the terminating NUL
+
+// ---------------------------------------------------------------------------------------
 //                          MarcDuino Button Settings
 // ---------------------------------------------------------------------------------------
 // Std MarcDuino Function Codes:
@@ -1744,6 +1769,10 @@ int marcDuinoBaudRate = 9600; // Set the baud rate for the Syren motor controlle
 
 #include <Sabertooth.h>
 
+#if ENABLE_ROS2D2
+#include "FootAuto.h"
+#endif
+
 // ---------------------------------------------------------------------------------------
 //                    Panel Management Variables
 // ---------------------------------------------------------------------------------------
@@ -1804,6 +1833,21 @@ int DP10_o_time = 0;
 // ---------------------------------------------------------------------------------------
 
 long previousDomeMillis = millis();
+#if ENABLE_ROS2D2
+int           domeTrackerSpeed = 0;        // last ROS:DOME: / DM: speed from the Pi
+unsigned long domeTrackerLastMs = 0;       // millis() of the last ROS:DOME: / DM:
+unsigned long domeManualLastMs = 0;        // millis() of the last manual dome move
+DomeTrack     domeTrack;                   // face tracking: may the Pi turn the dome
+ComboEdge     domeTrackCombo;              // PS + L2 on the dome controller
+char          rosLine[ROS_LINE_SIZE];      // USB line being received
+uint8_t       rosLineLen = 0;
+boolean       rosLineOverflow = false;     // line longer than the buffer: discard it
+boolean       rosLineBadByte = false;      // NUL or non-ASCII byte in the line: reject it
+
+// Declared here, after FootAuto.h: the prototypes the Arduino IDE generates go to the top
+// of the sketch, before FootAuto.h defines FootAutoReason.
+boolean domeTrackSetOff(FootAutoReason why);
+#endif
 long previousFootMillis = millis();
 long previousMarcDuinoMillis = millis();
 long previousDomeToggleMillis = millis();

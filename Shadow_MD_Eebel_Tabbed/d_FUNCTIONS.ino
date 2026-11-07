@@ -320,6 +320,39 @@ void rotateDome(int domeRotationSpeed, String mesg)
     }
 }
 
+#if ENABLE_ROS2D2
+// A dome speed from the Pi (ROS:DOME: or DM:), clamped to DOME_TRACKER_MAX_SPEED.
+void domeTrackerCommand(long speed)
+{
+  if (speed >  DOME_TRACKER_MAX_SPEED) speed =  DOME_TRACKER_MAX_SPEED;
+  if (speed < -DOME_TRACKER_MAX_SPEED) speed = -DOME_TRACKER_MAX_SPEED;
+  domeTrackerSpeed = (int)speed;
+  domeTrackerLastMs = millis();
+}
+
+// May the Pi's dome speed be used right now? Only with face tracking on, a dome command
+// received in the last DOME_TRACKER_TIMEOUT_MS, and no manual dome move in the last
+// DOME_TRACKER_MANUAL_HOLD_MS.
+boolean domeTrackerActive()
+{
+  unsigned long now = millis();
+  return (now - domeTrackerLastMs) < DOME_TRACKER_TIMEOUT_MS
+      && (now - domeManualLastMs) >= DOME_TRACKER_MANUAL_HOLD_MS
+      && domeTrack.on();
+}
+
+// The dome stick always wins; with the stick at rest, the Pi's speed (or 0).
+int domeTrackerOverride(int manualSpeed)
+{
+  if (manualSpeed != 0)
+  {
+    domeManualLastMs = millis();
+    return manualSpeed;
+  }
+  return domeTrackerActive() ? domeTrackerSpeed : 0;
+}
+
+#endif
 void domeDrive()
 {
   //Flood control prevention
@@ -334,7 +367,11 @@ void domeDrive()
     
      ps3NavControlSpeed = ps3DomeDrive(PS3NavDome);
 
+#if ENABLE_ROS2D2
+     domeRotationSpeed = domeTrackerOverride(ps3NavControlSpeed);
+#else
      domeRotationSpeed = ps3NavControlSpeed; 
+#endif
 
      rotateDome(domeRotationSpeed,"Controller Move");
     
@@ -343,10 +380,19 @@ void domeDrive()
     
      ps3NavControlSpeed = ps3DomeDrive(PS3NavFoot);
 
+#if ENABLE_ROS2D2
+     domeRotationSpeed = domeTrackerOverride(ps3NavControlSpeed);
+#else
      domeRotationSpeed = ps3NavControlSpeed; 
+#endif
 
      rotateDome(domeRotationSpeed,"Controller Move");
     
+#if ENABLE_ROS2D2
+  } else if (domeTrackerOverride(0) != 0)
+  {
+     rotateDome(domeTrackerOverride(0),"Dome Tracker");
+#endif
   } else
   {
      if (!isDomeMotorStopped)
@@ -4146,6 +4192,149 @@ boolean readUSB()
     return true;
 }
 
+#if ENABLE_ROS2D2
+// =======================================================================================
+//          ROS2D2 - USB commands from the Raspberry Pi and face tracking
+// =======================================================================================
+
+void printTrackState()
+{
+  if (domeTrack.on())
+  {
+    Serial.println(F("TRACK ON"));
+  } else
+  {
+    Serial.print(F("TRACK OFF "));
+    Serial.println(reasonName(domeTrack.lastOffReason()));
+  }
+}
+
+// Switch face tracking off (if it was on). domeDrive() stops the dome on its next pass,
+// because domeTrackerActive() no longer lets the Pi's speed through.
+boolean domeTrackSetOff(FootAutoReason why)
+{
+  if (!domeTrack.turnOff(why)) return false;
+  printTrackState();
+  return true;
+}
+
+// Once per loop, after readUSB(): losing the dome controller (disconnected, or no message
+// for FOOT_AUTO_SILENT_MS) switches face tracking off; PS + L2 on it toggles it.
+void domeTrackCheckController()
+{
+  if (!PS3NavDome->PS3NavigationConnected ||
+      footControllerSilent(millis(), PS3NavDome->getLastMessageTime(), FOOT_AUTO_SILENT_MS))
+  {
+    domeTrackCombo.update(false);
+    domeTrackSetOff(FA_CONTROLLER);
+    return;
+  }
+  boolean combo = PS3NavDome->getButtonPress(PS) && PS3NavDome->getButtonPress(L2);
+  if (!domeTrackCombo.update(combo)) return;
+  domeTrack.toggle();
+  printTrackState();
+}
+
+// One complete line from the USB serial port, without the line ending.
+void rosHandleLine(const char* line)
+{
+  // Skip leading and trailing spaces/tabs.
+  while (*line == ' ' || *line == '\t') line++;
+  size_t len = strlen(line);
+  while (len > 0 && (line[len - 1] == ' ' || line[len - 1] == '\t')) len--;
+  if (len == 0) return;
+  if (len >= ROS_LINE_SIZE)
+  {
+    Serial.println(F("ERR line too long"));
+    return;
+  }
+  char p[ROS_LINE_SIZE];
+  memcpy(p, line, len);
+  p[len] = '\0';
+
+  // ROS2D2 commands: ROS:TRACK:, ROS:DOME: (see FootAuto.h)
+  RosCmd ros = parseRosCommand(p);
+  switch (ros.kind)
+  {
+    case ROS_NONE:
+      break;                          // not a ROS: line, see below
+    case ROS_TRACK_OFF:
+      if (!domeTrackSetOff(FA_PI)) printTrackState();   // already off: still answer
+      return;
+    case ROS_TRACK_QUERY:
+      printTrackState();
+      return;
+    case ROS_DOME:
+      domeTrackerCommand(ros.a);      // silent: the Pi sends it about 15 times a second
+      return;
+    case ROS_ERROR:
+      Serial.print(F("ERR "));
+      Serial.println(ros.error);
+      return;
+    default:
+      Serial.println(F("ERR unknown command"));
+      return;
+  }
+
+  // DM:<speed>, -127..127: same as ROS:DOME:, kept for the DomeTracker proof of concept.
+  if ((p[0] == 'D' || p[0] == 'd') && (p[1] == 'M' || p[1] == 'm') && p[2] == ':')
+  {
+    char* endPtr = NULL;
+    long speed = strtol(p + 3, &endPtr, 10);
+    if (endPtr == p + 3)
+    {
+      Serial.println(F("ERR Invalid DM speed"));
+      return;
+    }
+    domeTrackerCommand(speed);
+    return;
+  }
+
+  Serial.println(F("ERR unknown command"));
+}
+
+// Reads the USB serial port without blocking and hands each complete line (ended by \n or
+// \r, so \r\n works too) to rosHandleLine(). A line that does not fit in ROS_LINE_SIZE - 1
+// characters is discarded up to its end and answered with "ERR line too long"; a line with
+// a NUL or non-ASCII byte is discarded and answered with "ERR unknown command".
+void rosReadUsb()
+{
+  while (Serial.available() > 0)
+  {
+    char c = (char)Serial.read();
+
+    if (c == '\n' || c == '\r')
+    {
+      if (rosLineOverflow)
+      {
+        Serial.println(F("ERR line too long"));
+      } else if (rosLineBadByte)
+      {
+        Serial.println(F("ERR unknown command"));
+      } else if (rosLineLen > 0)
+      {
+        rosLine[rosLineLen] = '\0';
+        rosHandleLine(rosLine);
+      }
+      rosLineLen = 0;
+      rosLineOverflow = false;
+      rosLineBadByte = false;
+      continue;
+    }
+
+    if (rosLineOverflow) continue;    // drop the rest of a line that is too long
+    if (c == '\0' || (uint8_t)c >= 0x80) rosLineBadByte = true;
+    if (rosLineLen < ROS_LINE_SIZE - 1)
+    {
+      rosLine[rosLineLen++] = c;
+    } else
+    {
+      rosLineOverflow = true;
+    }
+  }
+}
+
+#endif
 // =======================================================================================
 //          Print Output Function
 // =======================================================================================
