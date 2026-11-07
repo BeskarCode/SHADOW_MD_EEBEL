@@ -16,8 +16,10 @@ void loop()
     {
       //We have a fault condition that we want to ensure that we do NOT process any controller data!!!
 #if ENABLE_ROS2D2
-      // A faulty controller is as good as a lost one: face tracking goes off, so the dome
-      // does not turn on its own after a fault.
+      // A faulty controller is as good as a lost one: the autonomous mode goes off and the
+      // feet stop now (readUSB() does not stop them on every fault path). Face tracking goes
+      // off too, so the dome does not turn on its own after a fault.
+      footAutoSetOff(FA_CONTROLLER);
       domeTrackSetOff(FA_CONTROLLER);
 #endif
       printOutput();
@@ -25,6 +27,7 @@ void loop()
     }
     
 #if ENABLE_ROS2D2
+    footAutoCheckController();
     domeTrackCheckController();
     rosReadUsb();
 #endif
