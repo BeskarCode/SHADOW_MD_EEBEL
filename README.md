@@ -26,7 +26,7 @@ Differences from ShadowMD Lite:
 - The plain dome arrow still fires with dome L2 held (Lite excludes it).
 - The sound hooks on mode on/off (`FOOT_AUTO_ON_MD_FUNC`, `FOOT_AUTO_OFF_MD_FUNC`) are not ported.
 
-A combo bound to a mode no longer plays its MarcDuino action. Pressing a bound combo again within about 1 s is ignored (it shares the 1 s button throttle). With a Joy-Con, binding foot PS + L2 takes it away from the overspeed toggle. To remove a binding, send `ROS:BIND:CLEAR` or `ROS:BIND:RESET`.
+A combo bound to a mode no longer plays its MarcDuino action. Pressing a bound combo again within about 1 s is ignored (it shares the 1 s button throttle). With a Joy-Con, binding foot PS + L2 takes it away from the overspeed toggle; unbinding foot PS + L2 gives the overspeed back. `ROS:BIND:<COMBO>,none` removes one binding, `ROS:BIND:CLEAR` removes all of them and `ROS:BIND:RESET` restores the default (foot PS + L2 → goto). The Pi re-sends its bindings every time it connects, so the modes configured on the Pi (Setup → Modes) are what counts.
 
 Status: it compiles (PS3 Nav and Joy-Con); **not yet tested on a droid**. The host tests run with `bash test/run_tests.sh`.
 

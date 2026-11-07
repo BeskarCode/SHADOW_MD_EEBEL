@@ -6,10 +6,6 @@ void setup()
     //Debug Serial for use with USB Debugging
     Serial.begin(115200);
     while (!Serial);
-#if ENABLE_ROS2D2
-    Serial.println(F("AUTO OFF boot"));
-    Serial.println(F("TRACK OFF boot"));
-#endif
     
     if (Usb.Init() == -1)
     {
@@ -77,4 +73,10 @@ void setup()
     // Start serial communication with the trigger (over Serial)
 //    trigger.setup(&Serial3);
 //    trigger.setVolume(10);//Amount of attenuation  higher=LOWER volume..ten is pretty loud 
+#if ENABLE_ROS2D2
+    // Last thing in setup(): USB and the motor controllers are up, loop() reads next. The Pi bridge
+    // re-sends its bindings when it sees these lines, so they must not come before the delays above.
+    Serial.println(F("AUTO OFF boot"));
+    Serial.println(F("TRACK OFF boot"));
+#endif
 }
