@@ -245,10 +245,50 @@ void footMotorDrive()
   //Flood control prevention
   if ((millis() - previousFootMillis) < serialLatency) return;  
   
+#if ENABLE_ROS2D2
+  // Touching the foot stick ends the autonomous mode, and the stick drives in this same cycle
+  if (footAuto.on() && PS3NavFoot->PS3NavigationConnected &&
+      footStickCancels(PS3NavFoot->getAnalogHat(LeftHatX), PS3NavFoot->getAnalogHat(LeftHatY),
+                       joystickFootDeadZoneRange, PS3NavFoot->getButtonPress(L2),
+                       PS3NavDome->PS3NavigationConnected))
+  {
+    footAutoSetOff(FA_STICK);
+    // ps3FootMotorDrive() only sends after more than serialLatency ms: let it send this pass
+    previousFootMillis = millis() - serialLatency - 1;
+  }
+
+  if (footAuto.on())
+  {
+    footAutoDrive();
+    return;                           // ps3FootMotorDrive() would stop the feet (stick centred)
+  }
+
+#endif
   if (PS3NavFoot->PS3NavigationConnected) ps3FootMotorDrive(PS3NavFoot);
   
 }  
 
+#if ENABLE_ROS2D2
+// The feet as the Pi asks (ROS:FOOT:), through FootAuto's clamp, ramp and timeout. Same
+// signs as ps3FootMotorDrive(): turn through invertTurnDirection, drive as is.
+void footAutoDrive()
+{
+  FootOutput o = footAuto.tick(millis());
+  if (o.send)
+  {
+    ST->turn(o.turn * invertTurnDirection);
+    ST->drive(o.drive);
+    isFootMotorStopped = false;
+  } else if (o.stop)
+  {
+    ST->stop();
+    isFootMotorStopped = true;
+    footDriveSpeed = 0;
+  }
+  previousFootMillis = millis();
+}
+
+#endif
 
 // =======================================================================================
 //           domeDrive Motor Control Section
@@ -330,15 +370,15 @@ void domeTrackerCommand(long speed)
   domeTrackerLastMs = millis();
 }
 
-// May the Pi's dome speed be used right now? Only with face tracking on, a dome command
-// received in the last DOME_TRACKER_TIMEOUT_MS, and no manual dome move in the last
-// DOME_TRACKER_MANUAL_HOLD_MS.
+// May the Pi's dome speed be used right now? Only with face tracking or a foot mode on (in
+// a mode the Pi turns the dome too), a dome command received in the last
+// DOME_TRACKER_TIMEOUT_MS, and no manual dome move in the last DOME_TRACKER_MANUAL_HOLD_MS.
 boolean domeTrackerActive()
 {
   unsigned long now = millis();
   return (now - domeTrackerLastMs) < DOME_TRACKER_TIMEOUT_MS
       && (now - domeManualLastMs) >= DOME_TRACKER_MANUAL_HOLD_MS
-      && domeTrack.on();
+      && (domeTrack.on() || footAuto.on());
 }
 
 // The dome stick always wins; with the stick at rest, the Pi's speed (or 0).
@@ -423,6 +463,9 @@ void ps3ToggleSettings(DroidPad* myPS3 = PS3NavFoot)
         isFootMotorStopped = true;
         isStickEnabled = false;
         footDriveSpeed = 0;
+#if ENABLE_ROS2D2
+        footAutoSetOff(FA_BUTTON);    // a parked droid is not autonomous either
+#endif
     }
     
     if(myPS3->getButtonPress(PS) && myPS3->getButtonClick(CIRCLE))
@@ -436,7 +479,12 @@ void ps3ToggleSettings(DroidPad* myPS3 = PS3NavFoot)
     // Enable and Disable Overspeed
     // A Joy-Con has no L3, so there the toggle is stick click + ZL (PS + L2 to the sketch)
     #ifdef USE_JOYCON
+    #if ENABLE_ROS2D2
+    // With ROS2D2, PS + L2 belongs to its mode when one is bound (bindings.modeFor(0)): no overspeed toggle
+    if (myPS3->getButtonPress(PS) && myPS3->getButtonPress(L2) && isStickEnabled && bindings.modeFor(0) == MODE_NONE)
+    #else
     if (myPS3->getButtonPress(PS) && myPS3->getButtonPress(L2) && isStickEnabled)
+    #endif
     #else
     if (myPS3->getButtonPress(L3) && myPS3->getButtonPress(L1) && isStickEnabled)
     #endif
@@ -1530,6 +1578,9 @@ void marcDuinoFoot()
          
    } else
    {
+#if ENABLE_ROS2D2
+       footComboLatch.release();          // foot arrows up: a bound combo may fire again
+#endif
        return;    
    }
    
@@ -1547,6 +1598,9 @@ void marcDuinoFoot()
               // Skip this section
        } else
        {     
+#if ENABLE_ROS2D2
+               if (rosComboTakesOver(1)) return;   // FOOT_UP bound to a mode: no MarcDuino action
+#endif
                marcDuinoButtonPush(btnUP_type, btnUP_MD_func, btnUP_cust_MP3_num, btnUP_cust_LD_type, btnUP_cust_LD_text, btnUP_cust_panel, 
                                  btnUP_use_DP1,
                                  btnUP_DP1_open_start_delay, 
@@ -1597,6 +1651,9 @@ void marcDuinoFoot()
               // Skip this section
        } else
        {     
+#if ENABLE_ROS2D2
+            if (rosComboTakesOver(7)) return;   // FOOT_DOWN bound to a mode: no MarcDuino action
+#endif
             marcDuinoButtonPush(btnDown_type, btnDown_MD_func, btnDown_cust_MP3_num, btnDown_cust_LD_type, btnDown_cust_LD_text, btnDown_cust_panel, 
                          btnDown_use_DP1,
                          btnDown_DP1_open_start_delay, 
@@ -1645,6 +1702,9 @@ void marcDuinoFoot()
               // Skip this section
        } else
        {           
+#if ENABLE_ROS2D2
+            if (rosComboTakesOver(13)) return;   // FOOT_LEFT bound to a mode: no MarcDuino action
+#endif
             marcDuinoButtonPush(btnLeft_type, btnLeft_MD_func, btnLeft_cust_MP3_num, btnLeft_cust_LD_type, btnLeft_cust_LD_text, btnLeft_cust_panel, 
                          btnLeft_use_DP1,
                          btnLeft_DP1_open_start_delay, 
@@ -1694,6 +1754,9 @@ void marcDuinoFoot()
               // Skip this section
        } else
        {     
+#if ENABLE_ROS2D2
+             if (rosComboTakesOver(19)) return;   // FOOT_RIGHT bound to a mode: no MarcDuino action
+#endif
              marcDuinoButtonPush(btnRight_type, btnRight_MD_func, btnRight_cust_MP3_num, btnRight_cust_LD_type, btnRight_cust_LD_text, btnRight_cust_panel, 
                          btnRight_use_DP1,
                          btnRight_DP1_open_start_delay, 
@@ -1742,6 +1805,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(UP) && PS3NavFoot->getButtonPress(CROSS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(UP) && PS3NavDome->getButtonPress(CROSS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(2)) return;   // FOOT_UP_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnUP_CROSS_type, btnUP_CROSS_MD_func, btnUP_CROSS_cust_MP3_num, btnUP_CROSS_cust_LD_type, btnUP_CROSS_cust_LD_text, btnUP_CROSS_cust_panel, 
                          btnUP_CROSS_use_DP1,
                          btnUP_CROSS_DP1_open_start_delay, 
@@ -1786,6 +1852,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(DOWN) && PS3NavFoot->getButtonPress(CROSS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(DOWN) && PS3NavDome->getButtonPress(CROSS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(8)) return;   // FOOT_DOWN_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnDown_CROSS_type, btnDown_CROSS_MD_func, btnDown_CROSS_cust_MP3_num, btnDown_CROSS_cust_LD_type, btnDown_CROSS_cust_LD_text, btnDown_CROSS_cust_panel, 
                          btnDown_CROSS_use_DP1,
                          btnDown_CROSS_DP1_open_start_delay, 
@@ -1830,6 +1899,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(LEFT) && PS3NavFoot->getButtonPress(CROSS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(LEFT) && PS3NavDome->getButtonPress(CROSS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(14)) return;   // FOOT_LEFT_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnLeft_CROSS_type, btnLeft_CROSS_MD_func, btnLeft_CROSS_cust_MP3_num, btnLeft_CROSS_cust_LD_type, btnLeft_CROSS_cust_LD_text, btnLeft_CROSS_cust_panel, 
                          btnLeft_CROSS_use_DP1,
                          btnLeft_CROSS_DP1_open_start_delay, 
@@ -1874,6 +1946,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(RIGHT) && PS3NavFoot->getButtonPress(CROSS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(RIGHT) && PS3NavDome->getButtonPress(CROSS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(20)) return;   // FOOT_RIGHT_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnRight_CROSS_type, btnRight_CROSS_MD_func, btnRight_CROSS_cust_MP3_num, btnRight_CROSS_cust_LD_type, btnRight_CROSS_cust_LD_text, btnRight_CROSS_cust_panel, 
                          btnRight_CROSS_use_DP1,
                          btnRight_CROSS_DP1_open_start_delay, 
@@ -1921,6 +1996,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(UP) && PS3NavFoot->getButtonPress(CIRCLE)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(UP) && PS3NavDome->getButtonPress(CIRCLE))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(3)) return;   // FOOT_UP_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnUP_CIRCLE_type, btnUP_CIRCLE_MD_func, btnUP_CIRCLE_cust_MP3_num, btnUP_CIRCLE_cust_LD_type, btnUP_CIRCLE_cust_LD_text, btnUP_CIRCLE_cust_panel, 
                          btnUP_CIRCLE_use_DP1,
                          btnUP_CIRCLE_DP1_open_start_delay, 
@@ -1965,6 +2043,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(DOWN) && PS3NavFoot->getButtonPress(CIRCLE)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(DOWN) && PS3NavDome->getButtonPress(CIRCLE))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(9)) return;   // FOOT_DOWN_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnDown_CIRCLE_type, btnDown_CIRCLE_MD_func, btnDown_CIRCLE_cust_MP3_num, btnDown_CIRCLE_cust_LD_type, btnDown_CIRCLE_cust_LD_text, btnDown_CIRCLE_cust_panel, 
                          btnDown_CIRCLE_use_DP1,
                          btnDown_CIRCLE_DP1_open_start_delay, 
@@ -2009,6 +2090,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(LEFT) && PS3NavFoot->getButtonPress(CIRCLE)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(LEFT) && PS3NavDome->getButtonPress(CIRCLE))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(15)) return;   // FOOT_LEFT_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnLeft_CIRCLE_type, btnLeft_CIRCLE_MD_func, btnLeft_CIRCLE_cust_MP3_num, btnLeft_CIRCLE_cust_LD_type, btnLeft_CIRCLE_cust_LD_text, btnLeft_CIRCLE_cust_panel, 
                          btnLeft_CIRCLE_use_DP1,
                          btnLeft_CIRCLE_DP1_open_start_delay, 
@@ -2053,6 +2137,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(RIGHT) && PS3NavFoot->getButtonPress(CIRCLE)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(RIGHT) && PS3NavDome->getButtonPress(CIRCLE))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(21)) return;   // FOOT_RIGHT_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnRight_CIRCLE_type, btnRight_CIRCLE_MD_func, btnRight_CIRCLE_cust_MP3_num, btnRight_CIRCLE_cust_LD_type, btnRight_CIRCLE_cust_LD_text, btnRight_CIRCLE_cust_panel, 
                          btnRight_CIRCLE_use_DP1,
                          btnRight_CIRCLE_DP1_open_start_delay, 
@@ -2101,6 +2188,9 @@ void marcDuinoFoot()
     if (PS3NavFoot->getButtonPress(UP) && PS3NavFoot->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(4)) return;   // FOOT_UP_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnUP_L1_type, btnUP_L1_MD_func, btnUP_L1_cust_MP3_num, btnUP_L1_cust_LD_type, btnUP_L1_cust_LD_text, btnUP_L1_cust_panel, 
                          btnUP_L1_use_DP1,
                          btnUP_L1_DP1_open_start_delay, 
@@ -2145,6 +2235,9 @@ void marcDuinoFoot()
     if (PS3NavFoot->getButtonPress(DOWN) && PS3NavFoot->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(10)) return;   // FOOT_DOWN_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnDown_L1_type, btnDown_L1_MD_func, btnDown_L1_cust_MP3_num, btnDown_L1_cust_LD_type, btnDown_L1_cust_LD_text, btnDown_L1_cust_panel, 
                          btnDown_L1_use_DP1,
                          btnDown_L1_DP1_open_start_delay, 
@@ -2189,6 +2282,9 @@ void marcDuinoFoot()
     if (PS3NavFoot->getButtonPress(LEFT) && PS3NavFoot->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(16)) return;   // FOOT_LEFT_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnLeft_L1_type, btnLeft_L1_MD_func, btnLeft_L1_cust_MP3_num, btnLeft_L1_cust_LD_type, btnLeft_L1_cust_LD_text, btnLeft_L1_cust_panel, 
                          btnLeft_L1_use_DP1,
                          btnLeft_L1_DP1_open_start_delay, 
@@ -2233,6 +2329,9 @@ void marcDuinoFoot()
     if (PS3NavFoot->getButtonPress(RIGHT) && PS3NavFoot->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(22)) return;   // FOOT_RIGHT_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnRight_L1_type, btnRight_L1_MD_func, btnRight_L1_cust_MP3_num, btnRight_L1_cust_LD_type, btnRight_L1_cust_LD_text, btnRight_L1_cust_panel, 
                          btnRight_L1_use_DP1,
                          btnRight_L1_DP1_open_start_delay, 
@@ -2280,6 +2379,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(UP) && PS3NavFoot->getButtonPress(PS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(UP) && PS3NavDome->getButtonPress(PS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(5)) return;   // FOOT_UP_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnUP_PS_type, btnUP_PS_MD_func, btnUP_PS_cust_MP3_num, btnUP_PS_cust_LD_type, btnUP_PS_cust_LD_text, btnUP_PS_cust_panel, 
                          btnUP_PS_use_DP1,
                          btnUP_PS_DP1_open_start_delay, 
@@ -2324,6 +2426,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(DOWN) && PS3NavFoot->getButtonPress(PS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(DOWN) && PS3NavDome->getButtonPress(PS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(11)) return;   // FOOT_DOWN_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnDown_PS_type, btnDown_PS_MD_func, btnDown_PS_cust_MP3_num, btnDown_PS_cust_LD_type, btnDown_PS_cust_LD_text, btnDown_PS_cust_panel, 
                          btnDown_PS_use_DP1,
                          btnDown_PS_DP1_open_start_delay, 
@@ -2368,6 +2473,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(LEFT) && PS3NavFoot->getButtonPress(PS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(LEFT) && PS3NavDome->getButtonPress(PS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(17)) return;   // FOOT_LEFT_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnLeft_PS_type, btnLeft_PS_MD_func, btnLeft_PS_cust_MP3_num, btnLeft_PS_cust_LD_type, btnLeft_PS_cust_LD_text, btnLeft_PS_cust_panel, 
                          btnLeft_PS_use_DP1,
                          btnLeft_PS_DP1_open_start_delay, 
@@ -2412,6 +2520,9 @@ void marcDuinoFoot()
     if (((!PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(RIGHT) && PS3NavFoot->getButtonPress(PS)) || (PS3NavDome->PS3NavigationConnected && PS3NavFoot->getButtonPress(RIGHT) && PS3NavDome->getButtonPress(PS))) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(23)) return;   // FOOT_RIGHT_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(btnRight_PS_type, btnRight_PS_MD_func, btnRight_PS_cust_MP3_num, btnRight_PS_cust_LD_type, btnRight_PS_cust_LD_text, btnRight_PS_cust_panel, 
                          btnRight_PS_use_DP1,
                          btnRight_PS_DP1_open_start_delay, 
@@ -2473,6 +2584,9 @@ void marcDuinoDome()
          
    } else
    {
+#if ENABLE_ROS2D2
+       domeComboLatch.release();          // dome arrows up: a bound combo may fire again
+#endif
        return;    
    }
    
@@ -2485,6 +2599,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(UP) && !PS3NavDome->getButtonPress(CROSS) && !PS3NavDome->getButtonPress(CIRCLE) && !PS3NavDome->getButtonPress(L1) && !PS3NavDome->getButtonPress(PS) && !PS3NavFoot->getButtonPress(CROSS) && !PS3NavFoot->getButtonPress(CIRCLE) && !PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(25)) return;   // DOME_UP bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnUP_MD_func, btnUP_cust_MP3_num, btnUP_cust_LD_type, btnUP_cust_LD_text, btnUP_cust_panel, 
                          btnUP_use_DP1,
                          btnUP_DP1_open_start_delay, 
@@ -2528,6 +2645,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(DOWN) && !PS3NavDome->getButtonPress(CROSS) && !PS3NavDome->getButtonPress(CIRCLE) && !PS3NavDome->getButtonPress(L1) && !PS3NavDome->getButtonPress(PS) && !PS3NavFoot->getButtonPress(CROSS) && !PS3NavFoot->getButtonPress(CIRCLE) && !PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(34)) return;   // DOME_DOWN bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnDown_MD_func, btnDown_cust_MP3_num, btnDown_cust_LD_type, btnDown_cust_LD_text, btnDown_cust_panel, 
                          btnDown_use_DP1,
                          btnDown_DP1_open_start_delay, 
@@ -2570,6 +2690,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(LEFT) && !PS3NavDome->getButtonPress(CROSS) && !PS3NavDome->getButtonPress(CIRCLE) && !PS3NavDome->getButtonPress(L1) && !PS3NavDome->getButtonPress(PS) && !PS3NavFoot->getButtonPress(CROSS) && !PS3NavFoot->getButtonPress(CIRCLE) && !PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(43)) return;   // DOME_LEFT bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnLeft_MD_func, btnLeft_cust_MP3_num, btnLeft_cust_LD_type, btnLeft_cust_LD_text, btnLeft_cust_panel, 
                          btnLeft_use_DP1,
                          btnLeft_DP1_open_start_delay, 
@@ -2613,6 +2736,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(RIGHT) && !PS3NavDome->getButtonPress(CROSS) && !PS3NavDome->getButtonPress(CIRCLE) && !PS3NavDome->getButtonPress(L1) && !PS3NavDome->getButtonPress(PS) && !PS3NavFoot->getButtonPress(CROSS) && !PS3NavFoot->getButtonPress(CIRCLE) && !PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(52)) return;   // DOME_RIGHT bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnRight_MD_func, btnRight_cust_MP3_num, btnRight_cust_LD_type, btnRight_cust_LD_text, btnRight_cust_panel, 
                          btnRight_use_DP1,
                          btnRight_DP1_open_start_delay, 
@@ -2660,6 +2786,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(UP) && PS3NavFoot->getButtonPress(CROSS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(26)) return;   // DOME_UP_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnUP_CROSS_MD_func, btnUP_CROSS_cust_MP3_num, btnUP_CROSS_cust_LD_type, btnUP_CROSS_cust_LD_text, btnUP_CROSS_cust_panel, 
                          btnUP_CROSS_use_DP1,
                          btnUP_CROSS_DP1_open_start_delay, 
@@ -2704,6 +2833,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(DOWN) && PS3NavFoot->getButtonPress(CROSS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(35)) return;   // DOME_DOWN_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnDown_CROSS_MD_func, btnDown_CROSS_cust_MP3_num, btnDown_CROSS_cust_LD_type, btnDown_CROSS_cust_LD_text, btnDown_CROSS_cust_panel, 
                          btnDown_CROSS_use_DP1,
                          btnDown_CROSS_DP1_open_start_delay, 
@@ -2748,6 +2880,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(LEFT) && PS3NavFoot->getButtonPress(CROSS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(44)) return;   // DOME_LEFT_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnLeft_CROSS_MD_func, btnLeft_CROSS_cust_MP3_num, btnLeft_CROSS_cust_LD_type, btnLeft_CROSS_cust_LD_text, btnLeft_CROSS_cust_panel, 
                          btnLeft_CROSS_use_DP1,
                          btnLeft_CROSS_DP1_open_start_delay, 
@@ -2792,6 +2927,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(RIGHT) && PS3NavFoot->getButtonPress(CROSS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(53)) return;   // DOME_RIGHT_CROSS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnRight_CROSS_MD_func, btnRight_CROSS_cust_MP3_num, btnRight_CROSS_cust_LD_type, btnRight_CROSS_cust_LD_text, btnRight_CROSS_cust_panel, 
                          btnRight_CROSS_use_DP1,
                          btnRight_CROSS_DP1_open_start_delay, 
@@ -2839,6 +2977,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(UP) && PS3NavFoot->getButtonPress(CIRCLE) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(27)) return;   // DOME_UP_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnUP_CIRCLE_MD_func, btnUP_CIRCLE_cust_MP3_num, btnUP_CIRCLE_cust_LD_type, btnUP_CIRCLE_cust_LD_text, btnUP_CIRCLE_cust_panel, 
                          btnUP_CIRCLE_use_DP1,
                          btnUP_CIRCLE_DP1_open_start_delay, 
@@ -2883,6 +3024,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(DOWN) && PS3NavFoot->getButtonPress(CIRCLE) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(36)) return;   // DOME_DOWN_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnDown_CIRCLE_MD_func, btnDown_CIRCLE_cust_MP3_num, btnDown_CIRCLE_cust_LD_type, btnDown_CIRCLE_cust_LD_text, btnDown_CIRCLE_cust_panel, 
                          btnDown_CIRCLE_use_DP1,
                          btnDown_CIRCLE_DP1_open_start_delay, 
@@ -2927,6 +3071,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(LEFT) && PS3NavFoot->getButtonPress(CIRCLE) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(45)) return;   // DOME_LEFT_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnLeft_CIRCLE_MD_func, btnLeft_CIRCLE_cust_MP3_num, btnLeft_CIRCLE_cust_LD_type, btnLeft_CIRCLE_cust_LD_text, btnLeft_CIRCLE_cust_panel, 
                          btnLeft_CIRCLE_use_DP1,
                          btnLeft_CIRCLE_DP1_open_start_delay, 
@@ -2971,6 +3118,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(RIGHT) && PS3NavFoot->getButtonPress(CIRCLE) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(54)) return;   // DOME_RIGHT_CIRCLE bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnRight_CIRCLE_MD_func, btnRight_CIRCLE_cust_MP3_num, btnRight_CIRCLE_cust_LD_type, btnRight_CIRCLE_cust_LD_text, btnRight_CIRCLE_cust_panel, 
                          btnRight_CIRCLE_use_DP1,
                          btnRight_CIRCLE_DP1_open_start_delay, 
@@ -3019,6 +3169,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(UP) && PS3NavDome->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(28)) return;   // DOME_UP_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnUP_L1_MD_func, btnUP_L1_cust_MP3_num, btnUP_L1_cust_LD_type, btnUP_L1_cust_LD_text, btnUP_L1_cust_panel, 
                          btnUP_L1_use_DP1,
                          btnUP_L1_DP1_open_start_delay, 
@@ -3063,6 +3216,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(DOWN) && PS3NavDome->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(37)) return;   // DOME_DOWN_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnDown_L1_MD_func, btnDown_L1_cust_MP3_num, btnDown_L1_cust_LD_type, btnDown_L1_cust_LD_text, btnDown_L1_cust_panel, 
                          btnDown_L1_use_DP1,
                          btnDown_L1_DP1_open_start_delay, 
@@ -3107,6 +3263,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(LEFT) && PS3NavDome->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(46)) return;   // DOME_LEFT_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnLeft_L1_MD_func, btnLeft_L1_cust_MP3_num, btnLeft_L1_cust_LD_type, btnLeft_L1_cust_LD_text, btnLeft_L1_cust_panel, 
                          btnLeft_L1_use_DP1,
                          btnLeft_L1_DP1_open_start_delay, 
@@ -3151,6 +3310,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(RIGHT) && PS3NavDome->getButtonPress(L1) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(55)) return;   // DOME_RIGHT_L1 bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnRight_L1_MD_func, btnRight_L1_cust_MP3_num, btnRight_L1_cust_LD_type, btnRight_L1_cust_LD_text, btnRight_L1_cust_panel, 
                          btnRight_L1_use_DP1,
                          btnRight_L1_DP1_open_start_delay, 
@@ -3198,6 +3360,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(UP) && PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(29)) return;   // DOME_UP_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnUP_PS_MD_func, btnUP_PS_cust_MP3_num, btnUP_PS_cust_LD_type, btnUP_PS_cust_LD_text, btnUP_PS_cust_panel, 
                          btnUP_PS_use_DP1,
                          btnUP_PS_DP1_open_start_delay, 
@@ -3241,6 +3406,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(DOWN) && PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(38)) return;   // DOME_DOWN_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnDown_PS_MD_func, btnDown_PS_cust_MP3_num, btnDown_PS_cust_LD_type, btnDown_PS_cust_LD_text, btnDown_PS_cust_panel, 
                          btnDown_PS_use_DP1,
                          btnDown_PS_DP1_open_start_delay, 
@@ -3285,6 +3453,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(LEFT) && PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(47)) return;   // DOME_LEFT_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnLeft_PS_MD_func, btnLeft_PS_cust_MP3_num, btnLeft_PS_cust_LD_type, btnLeft_PS_cust_LD_text, btnLeft_PS_cust_panel, 
                          btnLeft_PS_use_DP1,
                          btnLeft_PS_DP1_open_start_delay, 
@@ -3329,6 +3500,9 @@ void marcDuinoDome()
     if (PS3NavDome->getButtonPress(RIGHT) && PS3NavFoot->getButtonPress(PS) && marcDuinoButtonCounter == 1)
     {
       
+#if ENABLE_ROS2D2
+       if (rosComboTakesOver(56)) return;   // DOME_RIGHT_PS bound to a mode: no MarcDuino action
+#endif
        marcDuinoButtonPush(1, FTbtnRight_PS_MD_func, btnRight_PS_cust_MP3_num, btnRight_PS_cust_LD_type, btnRight_PS_cust_LD_text, btnRight_PS_cust_panel, 
                          btnRight_PS_use_DP1,
                          btnRight_PS_DP1_open_start_delay, 
@@ -4235,6 +4409,79 @@ void domeTrackCheckController()
   printTrackState();
 }
 
+void printAutoState()
+{
+  if (footAuto.on())
+  {
+    Serial.print(F("AUTO ON "));
+    Serial.println(modeName(footAuto.mode()));
+  } else
+  {
+    Serial.print(F("AUTO OFF "));
+    Serial.println(reasonName(footAuto.lastOffReason()));
+  }
+}
+
+// Switch the foot mode off (if it was on): stop the feet right now, then tell the Pi.
+// When the stick is the reason, footMotorDrive() lets the stick drive on this same pass.
+boolean footAutoSetOff(FootAutoReason why)
+{
+  if (!footAuto.turnOff(why)) return false;
+  footAuto.tick(millis());            // drop FootAuto's own pending stop: it happens here
+  ST->stop();
+  isFootMotorStopped = true;
+  footDriveSpeed = 0;
+  printAutoState();
+  return true;
+}
+
+// A mode combo was pressed (ComboBindings): off -> m on (only with the drive stick enabled);
+// m on -> off; another mode on -> switch to m (FootAuto stops the feet until the Pi's next
+// ROS:FOOT:).
+void rosModePress(RosMode m)
+{
+  if (footAuto.on() && footAuto.mode() == m)
+  {
+    footAutoSetOff(FA_BUTTON);
+    return;
+  }
+  if (!footAuto.on() && !isStickEnabled) return;
+  footAuto.press(m);
+  printAutoState();
+}
+
+// Once per loop, after readUSB(): losing the foot controller (disconnected, or no message
+// for FOOT_AUTO_SILENT_MS) switches the mode off and stops the feet; PS + L2 on it is the
+// combo FOOT_PS_L2 (index 0), which switches the mode bound to it, if any.
+void footAutoCheckController()
+{
+  if (!PS3NavFoot->PS3NavigationConnected ||
+      footControllerSilent(millis(), PS3NavFoot->getLastMessageTime(), FOOT_AUTO_SILENT_MS))
+  {
+    footAutoCombo.update(false);
+    footAutoSetOff(FA_CONTROLLER);
+    return;
+  }
+  boolean combo = PS3NavFoot->getButtonPress(PS) && PS3NavFoot->getButtonPress(L2);
+  if (!footAutoCombo.update(combo)) return;
+  RosMode m = bindings.modeFor(0);    // 0 = FOOT_PS_L2
+  if (m != MODE_NONE) rosModePress(m);
+}
+
+// Called by marcDuinoFoot()/marcDuinoDome() right before a combo's MarcDuino action (any
+// button type, custom routines included). combo is its index in ROS_COMBO_NAMES. true when
+// the combo is bound to a mode: the caller then skips the action. The mode switches only on
+// the first firing of a press; holding the combo (which re-fires about once a second) does
+// nothing more until that controller's arrows are released.
+boolean rosComboTakesOver(int combo)
+{
+  RosMode mode = bindings.modeFor(combo);
+  if (mode == MODE_NONE) return false;
+  ComboLatch& latch = combo < ROS_FIRST_DOME_COMBO ? footComboLatch : domeComboLatch;
+  if (latch.press(combo)) rosModePress(mode);
+  return true;
+}
+
 // One complete line from the USB serial port, without the line ending.
 void rosHandleLine(const char* line)
 {
@@ -4252,12 +4499,44 @@ void rosHandleLine(const char* line)
   memcpy(p, line, len);
   p[len] = '\0';
 
-  // ROS2D2 commands: ROS:TRACK:, ROS:DOME: (see FootAuto.h)
+  // ROS2D2 commands: ROS:FOOT:, ROS:AUTO:, ROS:BIND:, ROS:TRACK:, ROS:DOME: (see FootAuto.h)
   RosCmd ros = parseRosCommand(p);
   switch (ros.kind)
   {
     case ROS_NONE:
       break;                          // not a ROS: line, see below
+    case ROS_FOOT:
+      // Silent when accepted (about 15 a second); rejected while the mode is off, 1 ERR a second
+      if (!footAuto.command(ros.a, ros.b, millis()) && rateLimitAllows(footAutoErrMs, millis(), 1000))
+        Serial.println(F("ERR FOOT AUTO OFF"));
+      return;
+    case ROS_AUTO_OFF:
+      if (!footAutoSetOff(FA_PI)) printAutoState();     // already off: still answer
+      return;
+    case ROS_AUTO_QUERY:
+      printAutoState();
+      return;
+    case ROS_BIND:
+      // bind() is also true for "none" on a combo that was not bound: still BIND OK.
+      if (bindings.bind(ros.a, (RosMode)ros.b))
+      {
+        Serial.print(F("BIND OK "));
+        Serial.print((const __FlashStringHelper*)ROS_COMBO_NAMES[ros.a]);
+        Serial.print(' ');
+        Serial.println(modeName((RosMode)ros.b));
+      } else
+      {
+        Serial.println(F("ERR BIND FULL"));
+      }
+      return;
+    case ROS_BIND_CLEAR:
+      bindings.clear();
+      Serial.println(F("BIND CLEAR"));
+      return;
+    case ROS_BIND_RESET:
+      bindings.reset();
+      Serial.println(F("BIND RESET"));
+      return;
     case ROS_TRACK_OFF:
       if (!domeTrackSetOff(FA_PI)) printTrackState();   // already off: still answer
       return;

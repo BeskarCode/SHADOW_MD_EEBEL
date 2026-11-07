@@ -7,6 +7,7 @@ void setup()
     Serial.begin(115200);
     while (!Serial);
 #if ENABLE_ROS2D2
+    Serial.println(F("AUTO OFF boot"));
     Serial.println(F("TRACK OFF boot"));
 #endif
     

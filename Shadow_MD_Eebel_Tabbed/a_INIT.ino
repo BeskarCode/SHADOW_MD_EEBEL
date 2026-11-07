@@ -64,6 +64,15 @@ int CustomSongMax = 8; //Total Number of Custom Songs
 //    manual move ROS:DOME: is ignored for DOME_TRACKER_MANUAL_HOLD_MS. Losing the dome
 //    controller, a controller fault or ROS:TRACK:0 from the Pi switch it off. The Pi can
 //    never switch it on.
+//  - Autonomous feet (navigation modes goto, forward, patrol, follow): a controller combo
+//    switches a mode on, the same combo switches it off, another bound combo switches to its
+//    mode. By default PS + L2 on the foot controller -> goto; the Pi can rebind combos with
+//    ROS:BIND:<COMBO>,<mode> (ROS:BIND:CLEAR, ROS:BIND:RESET). A combo bound to a mode no
+//    longer runs its MarcDuino action. While a mode is on, the feet follow ROS:FOOT:<drive>,
+//    <turn> through FOOT_AUTO_MAX_DRIVE/TURN and FOOT_AUTO_RAMP, and stop when no command
+//    arrives for FOOT_AUTO_TIMEOUT_MS (the mode stays on). Touching the foot stick, losing
+//    the foot controller, a controller fault, PS + CROSS (drive stick off) or ROS:AUTO:0
+//    switch the mode off. The Pi can never switch it on.
 //  - Any other line answers "ERR unknown command"; a line longer than ROS_LINE_SIZE - 1
 //    characters is discarded and answers "ERR line too long".
 // 0 = off: the sketch builds and behaves exactly as before.
@@ -1843,10 +1852,18 @@ char          rosLine[ROS_LINE_SIZE];      // USB line being received
 uint8_t       rosLineLen = 0;
 boolean       rosLineOverflow = false;     // line longer than the buffer: discard it
 boolean       rosLineBadByte = false;      // NUL or non-ASCII byte in the line: reject it
+FootAuto      footAuto(FootAutoConfig{FOOT_AUTO_MAX_DRIVE, FOOT_AUTO_MAX_TURN, FOOT_AUTO_TIMEOUT_MS, FOOT_AUTO_RAMP});
+ComboEdge     footAutoCombo;               // PS + L2 on the foot controller
+ComboBindings bindings;                    // which combo switches which mode on (ROS:BIND:)
+ComboLatch    footComboLatch;              // bound foot-arrow combo held down (fires once per press)
+ComboLatch    domeComboLatch;              // same for the dome-arrow combos
+uint32_t      footAutoErrMs = (uint32_t)0 - (uint32_t)1000;   // last "ERR FOOT AUTO OFF" (1 per second)
 
 // Declared here, after FootAuto.h: the prototypes the Arduino IDE generates go to the top
-// of the sketch, before FootAuto.h defines FootAutoReason.
+// of the sketch, before FootAuto.h defines FootAutoReason and RosMode.
 boolean domeTrackSetOff(FootAutoReason why);
+boolean footAutoSetOff(FootAutoReason why);
+void rosModePress(RosMode m);
 #endif
 long previousFootMillis = millis();
 long previousMarcDuinoMillis = millis();
