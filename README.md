@@ -30,6 +30,10 @@ A combo bound to a mode no longer plays its MarcDuino action. Pressing a bound c
 
 Status: it compiles (PS3 Nav and Joy-Con); **not yet tested on a droid**. The host tests run with `bash test/run_tests.sh`.
 
+## Web console (optional)
+
+The [serial web console](https://github.com/BeskarCode/ShadowMDLite/tree/main/serial-web-console) opens and closes panels, moves the holos and helps you calibrate the MarcDuino servos from your laptop, over the Mega's USB cable. It needs `ENABLE_PC_TO_MARCDUINO_FORWARDING` set to `1` in `Shadow_MD_Eebel_Tabbed/a_INIT.ino` (off by default). How to use it, and how to add it to your own classic Shadow MD sketch: [docs/web-console.md](docs/web-console.md).
+
 SHADOW Arduino Code for R2-D2 using Marcduino Control boards.  This code is used with a three Marcduino configuration.  Two are in the dome (Master and Slave) and a third is in the body (Which is setup as a Master using the Eclipse IDE.  Instructions for how to upload the Marcduino firmware are on the Curious Marc website. You will need an FTDI to USB cable, I got mine from SparkFun.com and it coasts about $18.  To get Eclipse to work, I had to install the JAVA IDE.
 
 You will need to flash the Dome Master Marcduino and the Body Master Marcduino with the included firmware to ge the sketch to work correctly.  The Slave Marcduino in the dome uses the default firmware.
