@@ -87,6 +87,10 @@ int CustomSongMax = 8; //Total Number of Custom Songs
 #define DOME_TRACKER_MANUAL_HOLD_MS  2000   // after a manual dome move, ROS:DOME: is ignored this long
 #define ROS_LINE_SIZE         64       // USB line buffer, including the terminating NUL
 
+// Web console (S1:/S3: lines over USB go to the MarcDuinos), see docs/web-console.md. 0 = off.
+#define ENABLE_PC_TO_MARCDUINO_FORWARDING 0
+#include "PcForwarding.h"
+
 // ---------------------------------------------------------------------------------------
 //                          MarcDuino Button Settings
 // ---------------------------------------------------------------------------------------

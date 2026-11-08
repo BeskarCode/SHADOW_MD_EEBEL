@@ -31,6 +31,9 @@ void loop()
     domeTrackCheckController();
     rosReadUsb();
 #endif
+#if ENABLE_PC_TO_MARCDUINO_FORWARDING && !ENABLE_ROS2D2
+    pcFwdReadUsb();
+#endif
     footMotorDrive();
     domeDrive();
     marcDuinoDome();
