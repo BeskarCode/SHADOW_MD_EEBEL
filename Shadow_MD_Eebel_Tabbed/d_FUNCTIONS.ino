@@ -4485,6 +4485,9 @@ boolean rosComboTakesOver(int combo)
 // One complete line from the USB serial port, without the line ending.
 void rosHandleLine(const char* line)
 {
+#if ENABLE_PC_TO_MARCDUINO_FORWARDING
+  if (pcFwdHandleLine(line)) return;   // S1:, S3:, PING, HELP (PcForwarding.h)
+#endif
   // Skip leading and trailing spaces/tabs.
   while (*line == ' ' || *line == '\t') line++;
   size_t len = strlen(line);
