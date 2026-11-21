@@ -4318,6 +4318,9 @@ boolean readUSB()
      // Usb.Task(). With Joy-Cons this also puts the left half on the foot and the
      // right half on the dome, whichever connected first.
      DroidPad::updatePair(*PS3NavFoot, *PS3NavDome);
+     #ifdef VIRTUAL_PAD_ON
+       padStateCheck();        // tells the Pi when a Nav slot changes between real, virtual and none
+     #endif
 
      #ifdef USE_JOYCON
        // While pairing, the droid does not move and the controllers are not read.
@@ -4370,6 +4373,30 @@ boolean readUSB()
 // =======================================================================================
 //          ROS2D2 - USB commands from the Raspberry Pi and face tracking
 // =======================================================================================
+
+#ifdef VIRTUAL_PAD_ON
+// "PAD F:<real|virtual|none> D:<...>" for the Pi (the console warns when a real Nav is on)
+void printPadState()
+{
+  char buf[32];
+  padReport(buf, sizeof(buf), footPrefer.who(), domePrefer.who());
+  Serial.println(buf);
+}
+
+void padStateCheck()
+{
+  static const char* lastFoot = NULL;
+  static const char* lastDome = NULL;
+  const char* f = footPrefer.who();
+  const char* d = domePrefer.who();
+  if (f != lastFoot || d != lastDome)
+  {
+    lastFoot = f;
+    lastDome = d;
+    printPadState();
+  }
+}
+#endif
 
 void printTrackState()
 {
@@ -4501,6 +4528,21 @@ void rosHandleLine(const char* line)
   char p[ROS_LINE_SIZE];
   memcpy(p, line, len);
   p[len] = '\0';
+
+  #ifdef VIRTUAL_PAD_ON
+  // ROS:PAD: the console's virtual Navs (VirtualPad.h). Silent when accepted (20 a second).
+  {
+    PadPacket pk;
+    const char* err = NULL;
+    switch (parsePadCommand(p, pk, err))
+    {
+      case PAD_PACKET: (pk.pad ? vpadDomeState : vpadFootState).feed(pk, millis()); return;
+      case PAD_QUERY:  printPadState(); return;
+      case PAD_BAD:    Serial.print(F("ERR ")); Serial.println(err); return;
+      default:         break;
+    }
+  }
+  #endif
 
   // ROS2D2 commands: ROS:FOOT:, ROS:AUTO:, ROS:BIND:, ROS:TRACK:, ROS:DOME: (see FootAuto.h)
   RosCmd ros = parseRosCommand(p);

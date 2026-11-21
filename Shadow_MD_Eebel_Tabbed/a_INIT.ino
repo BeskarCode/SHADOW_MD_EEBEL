@@ -1774,6 +1774,12 @@ int marcDuinoBaudRate = 9600; // Set the baud rate for the Syren motor controlle
 #include "DroidController.h"
 #include "PS3NavController.h"
 #include "DroidPad.h"          // includes JoyConController.h only when USE_JOYCON is set
+#if defined(ENABLE_VIRTUAL_PAD) && defined(USE_PS3_NAV) && ENABLE_ROS2D2
+  #define VIRTUAL_PAD_ON
+  #include "VirtualPad.h"
+  #include "VirtualNavController.h"
+  #include "PreferRealController.h"
+#endif
 
 // Satisfy IDE, which only needs to see the include statment in the ino.
 #ifdef dobogusinclude
@@ -1898,8 +1904,21 @@ BTD Btd(&Usb);
 #ifdef USE_PS3_NAV
   PS3NavController navFootImpl(&Btd, "FOOT", LED1);
   PS3NavController navDomeImpl(&Btd, "DOME", LED2);
-  DroidPad  footPad(&navFootImpl, &navFootImpl);
-  DroidPad  domePad(&navDomeImpl, &navDomeImpl);
+  #ifdef VIRTUAL_PAD_ON
+    // Each slot: the real Nav, or the console's virtual one while the real one is not in use
+    VirtualPadState      vpadFootState, vpadDomeState;
+    VirtualNavController vnavFoot(vpadFootState), vnavDome(vpadDomeState);
+    PadArbiter           arbFoot, arbDome;
+    PreferRealController footPrefer(&navFootImpl, &vnavFoot, arbFoot, joystickFootDeadZoneRange);
+    PreferRealController domePrefer(&navDomeImpl, &vnavDome, arbDome, joystickDomeDeadZoneRange);
+    DroidPad  footPad(&footPrefer, &navFootImpl);
+    DroidPad  domePad(&domePrefer, &navDomeImpl);
+    void printPadState();   // d_FUNCTIONS.ino (inside #ifdef: Arduino does not prototype those)
+    void padStateCheck();
+  #else
+    DroidPad  footPad(&navFootImpl, &navFootImpl);
+    DroidPad  domePad(&navDomeImpl, &navDomeImpl);
+  #endif
 #else
   JoyConController joyFootImpl(&Btd, JOYCON_LEFT,  "FOOT", JOYCON_PAIRING_MODE);
   JoyConController joyDomeImpl(&Btd, JOYCON_RIGHT, "DOME", JOYCON_PAIRING_MODE);

@@ -18,6 +18,13 @@
 #define USE_PS3_NAV                 // original behaviour, two PS3 Move Navigation controllers
 //#define USE_JOYCON                // two Joy-Cons: left for the feet, right for the dome
 
+// --- ROS2D2 web console: virtual PS3 Navs ------------------------------------------------
+// The console's "Remote" window drives a foot and a dome Nav over the Pi's serial line
+// (ROS:PAD, see VirtualPad.h). A real Nav in use always wins; if the console goes quiet the
+// virtual Nav lets go in 0.3 s and is switched off in 2 s. Only with USE_PS3_NAV. Comment it
+// out and the sketch is exactly as before.
+#define ENABLE_VIRTUAL_PAD
+
 // --- Joy-Con options, ignored unless USE_JOYCON is selected -----------------------------
 
 // Pairing needs no change here. On the first boot the droid pairs by itself: hold the
