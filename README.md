@@ -28,6 +28,8 @@ Differences from ShadowMD Lite:
 
 A combo bound to a mode no longer plays its MarcDuino action. Pressing a bound combo again within about 1 s is ignored (it shares the 1 s button throttle). With a Joy-Con, binding foot PS + L2 takes it away from the overspeed toggle; unbinding foot PS + L2 gives the overspeed back. `ROS:BIND:<COMBO>,none` removes one binding, `ROS:BIND:CLEAR` removes all of them and `ROS:BIND:RESET` restores the default (foot PS + L2 → goto). The Pi re-sends its bindings every time it connects, so the modes configured on the Pi (Setup → Modes) are what counts.
 
+**Virtual PS3 Navs** (`ENABLE_VIRTUAL_PAD` in `Shadow_MD_Eebel_Tabbed/ControllerConfig.h`, needs `USE_PS3_NAV` and `ENABLE_ROS2D2`): the ROS2D2 console's **Remote** window drives a foot and a dome Nav over USB (`ROS:PAD`), to try the droid at home without the real controllers. A real Nav in use always wins; if the console goes quiet the virtual Nav lets go in 0.3 s and is switched off in 2 s. Same commands and `VirtualPad.h` as ShadowMD Lite: see [PCSerialProtocol.md](https://github.com/BeskarCode/ShadowMDLite/blob/main/PCSerialProtocol.md), section *Virtual PS3 Navs*. The console's Shortcuts list ShadowMD Lite's MarcDuino map: in this sketch the actions may differ, and the 20 combos above that never fire do nothing.
+
 Status: it compiles (PS3 Nav and Joy-Con); **not yet tested on a droid**. The host tests run with `bash test/run_tests.sh`.
 
 ## Web console (optional)
