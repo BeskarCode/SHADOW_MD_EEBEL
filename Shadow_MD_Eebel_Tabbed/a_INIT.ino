@@ -64,7 +64,7 @@ int CustomSongMax = 8; //Total Number of Custom Songs
 //    manual move ROS:DOME: is ignored for DOME_TRACKER_MANUAL_HOLD_MS. Losing the dome
 //    controller, a controller fault or ROS:TRACK:0 from the Pi switch it off. The Pi can
 //    never switch it on.
-//  - Autonomous feet (navigation modes goto, forward, patrol, follow): a controller combo
+//  - Autonomous feet (navigation modes goto, forward, patrol, follow, free): a controller combo
 //    switches a mode on, the same combo switches it off, another bound combo switches to its
 //    mode. By default PS + L2 on the foot controller -> goto; the Pi can rebind combos with
 //    ROS:BIND:<COMBO>,<mode> (ROS:BIND:CLEAR, ROS:BIND:RESET). A combo bound to a mode no
